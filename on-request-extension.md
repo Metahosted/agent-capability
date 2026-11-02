@@ -72,6 +72,7 @@ Activation follows A2A unchanged (A2A §3.2.6, §4.6.1, extensions topic "Extens
 
 - A client activates the extension by listing its URI in the `A2A-Extensions` service parameter (an HTTP header in the JSON-RPC and HTTP+JSON bindings, gRPC metadata in the gRPC binding).
 - An agent that has activated it SHOULD echo the URI in its response's `A2A-Extensions`, as A2A recommends, and MUST list the URI in the `extensions` array of each Message or Artifact that carries this extension's metadata.
+- An agent SHOULD also accept `X-A2A-Extensions`, the header name used by A2A 0.3 (extensions topic at v0.3.0), and SHOULD echo it in the spelling received. Clients built for 0.3 send only that spelling.
 - Activation changes **only** whether replies carry structured metadata. It never changes what the agent gives or withholds (§5.1).
 
 ## 5. Agent behaviour

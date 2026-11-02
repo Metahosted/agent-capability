@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-capability.org/ext/on-request/v1/schema.json",
+  "title": "On Request: A2A extension https://agent-capability.org/ext/on-request/v1",
+  "description": "Draft 0.1, 1 Nov 2026, not published. Defines the params of the AgentExtension declared in AgentCard.capabilities.extensions (params) and the object placed in Message.metadata or Artifact.metadata under the extension URI (reply). Checks a schema cannot make (each id names a skill in the same card; no listed skill carries securityRequirements; no on-request value in skill text) are left to validators.",
+  "$defs": {
+    "personEntry": {
+      "description": "Where a person asks: an https address on an origin the operator controls, or a tel: number answered by or for the operator. The same for every caller; carries nothing about the person (OR-3.4, OR-3.8).",
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2048,
+      "anyOf": [
+        {"pattern": "^https://[^?#]+$"},
+        {"pattern": "^tel:\\+[0-9][0-9().-]{3,}$"}
+      ]
+    },
+    "skillEntry": {
+      "type": "object",
+      "required": ["id", "personEntry"],
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "description": "The id of an AgentSkill in the same card (OR-3.3).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "personEntry": {"$ref": "#/$defs/personEntry"},
+        "assistantAccess": {
+          "description": "The operator's opt-in (OR-3.5). Absent means false.",
+          "type": "boolean",
+          "default": false
+        },
+        "completion": {
+          "description": "For a skill that changes something in the operator's systems (OR-3.6).",
+          "enum": ["in-conversation", "deferred"]
+        }
+      },
+      "if": {"required": ["completion"]},
+      "then": {
+        "description": "An action needs an https address (OR-3.4).",
+        "properties": {"personEntry": {"pattern": "^https://"}}
+      }
+    },
+    "params": {
+      "description": "AgentExtension.params for this extension (OR-3.2).",
+      "type": "object",
+      "required": ["skills"],
+      "additionalProperties": true,
+      "properties": {
+        "skills": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "items": {"$ref": "#/$defs/skillEntry"}
+        }
+      }
+    },
+    "agentExtension": {
+      "description": "The whole AgentExtension entry as it appears in the Agent Card (OR-3.1).",
+      "type": "object",
+      "required": ["uri", "params"],
+      "properties": {
+        "uri": {"const": "https://agent-capability.org/ext/on-request/v1"},
+        "description": {"type": "string"},
+        "required": {"const": false},
+        "params": {"$ref": "#/$defs/params"}
+      }
+    },
+    "reply": {
+      "description": "The object in Message.metadata or Artifact.metadata under the key https://agent-capability.org/ext/on-request/v1 (§6).",
+      "type": "object",
+      "required": ["status", "skillId"],
+      "additionalProperties": true,
+      "properties": {
+        "status": {"enum": ["on-request", "action-referred", "given-on-opt-in"]},
+        "skillId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "personEntry": {"$ref": "#/$defs/personEntry"}
+      },
+      "if": {
+        "required": ["status"],
+        "properties": {"status": {"enum": ["on-request", "action-referred"]}}
+      },
+      "then": {"required": ["personEntry"]}
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/agentExtension"},
+    {"$ref": "#/$defs/params"},
+    {"$ref": "#/$defs/reply"}
+  ]
+}

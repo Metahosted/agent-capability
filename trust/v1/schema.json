@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-capability.org/trust/v1/schema.json",
+  "title": "Agent Capability Trust v1",
+  "description": "Draft 0.1, 1 Nov 2026, not published. $defs: attestation (the JWS payload, §5.2), trustManifest (an ARD trustManifest relying on this framework, §6.1), trustListEntry and trustList (§7.2). Checks a schema cannot make (signatures, log inclusion, that the attestation names the card it is found with, that the trust domain matches the ARD identifier's publisher) are left to consumers and validators.",
+  "$defs": {
+    "domain": {
+      "type": "string",
+      "pattern": "^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"
+    },
+    "httpsUrl": {"type": "string", "format": "uri", "pattern": "^https://"},
+    "thumbprint": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43}$"},
+    "method": {"enum": ["agent-capability-dns-01", "agent-capability-http-01", "agent-capability-legal-entity"]},
+    "attestation": {
+      "type": "object",
+      "required": ["framework", "id", "verifier", "level", "domain", "method", "checked", "issued", "expires", "log"],
+      "additionalProperties": false,
+      "properties": {
+        "framework": {"const": "https://agent-capability.org/trust/v1"},
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "verifier": {"$ref": "#/$defs/domain"},
+        "level": {"enum": [1, 2]},
+        "domain": {"$ref": "#/$defs/domain"},
+        "agentCard": {"$ref": "#/$defs/httpsUrl"},
+        "declaration": {"$ref": "#/$defs/httpsUrl"},
+        "cardKeys": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["kid", "thumbprint"],
+            "additionalProperties": false,
+            "properties": {
+              "kid": {"type": "string", "minLength": 1, "maxLength": 128},
+              "thumbprint": {"$ref": "#/$defs/thumbprint"}
+            }
+          }
+        },
+        "method": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/method"}},
+        "checked": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "label": {"type": "string", "pattern": "^_agent-capability\\."},
+            "url": {"type": "string", "pattern": "^https://[^/]+/\\.well-known/agent-capability-challenge$"},
+            "dnssec": {"type": "boolean"}
+          }
+        },
+        "entity": {
+          "type": "object",
+          "required": ["legalName", "jurisdiction", "source", "recordId", "domainLink", "checked"],
+          "additionalProperties": false,
+          "properties": {
+            "legalName": {"type": "string", "minLength": 1, "maxLength": 300},
+            "tradingNames": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 300}},
+            "jurisdiction": {"type": "string", "pattern": "^[A-Z]{2}(-[A-Z0-9]{1,3})?$"},
+            "source": {"type": "string", "minLength": 1, "maxLength": 300},
+            "recordId": {"type": "string", "minLength": 1, "maxLength": 128},
+            "domainLink": {"enum": ["evidence-names-domain", "contact-point-challenge", "evidence-holder-confirmed"]},
+            "checked": {"type": "string", "format": "date"}
+          }
+        },
+        "issued": {"type": "string", "format": "date-time"},
+        "expires": {"type": "string", "format": "date-time"},
+        "log": {"$ref": "#/$defs/httpsUrl"}
+      },
+      "allOf": [
+        {
+          "description": "At least one of agentCard or declaration is covered.",
+          "anyOf": [{"required": ["agentCard"]}, {"required": ["declaration"]}]
+        },
+        {
+          "description": "Level 2 carries entity and the legal-entity method; level 1 carries neither (TF-5.5).",
+          "if": {"properties": {"level": {"const": 2}}},
+          "then": {"required": ["entity"], "properties": {"method": {"contains": {"const": "agent-capability-legal-entity"}}}},
+          "else": {"not": {"required": ["entity"]}, "properties": {"method": {"not": {"contains": {"const": "agent-capability-legal-entity"}}}}}
+        },
+        {
+          "description": "A domain-control method is always relied on (TF-4.10).",
+          "properties": {"method": {"anyOf": [
+            {"contains": {"const": "agent-capability-dns-01"}},
+            {"contains": {"const": "agent-capability-http-01"}}
+          ]}}
+        }
+      ]
+    },
+    "trustManifest": {
+      "description": "An ARD trustManifest relying on this framework (TF-6.1, TF-6.2).",
+      "type": "object",
+      "required": ["identity", "identityType", "trustSchema", "attestations"],
+      "properties": {
+        "identity": {"type": "string", "pattern": "^https://[a-z0-9.-]+$"},
+        "identityType": {"const": "https"},
+        "trustSchema": {
+          "type": "object",
+          "required": ["identifier", "version", "governanceUri", "verificationMethods"],
+          "properties": {
+            "identifier": {"const": "https://agent-capability.org/trust/v1"},
+            "version": {"const": "1.0"},
+            "governanceUri": {"$ref": "#/$defs/httpsUrl"},
+            "verificationMethods": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/method"}}
+          }
+        },
+        "attestations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["type", "uri", "mediaType", "digest"],
+            "properties": {
+              "type": {"enum": ["agent-capability:domain-control", "agent-capability:legal-entity"]},
+              "uri": {"$ref": "#/$defs/httpsUrl"},
+              "mediaType": {"const": "application/jose"},
+              "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+            }
+          }
+        }
+      }
+    },
+    "trustListEntry": {
+      "type": "object",
+      "required": ["name", "domain", "levels", "keys", "log", "audit", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 200},
+        "domain": {"$ref": "#/$defs/domain"},
+        "levels": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": [1, 2]}},
+        "keys": {"$ref": "#/$defs/httpsUrl"},
+        "log": {"$ref": "#/$defs/httpsUrl"},
+        "audit": {
+          "type": "object",
+          "required": ["date", "report", "nextDue"],
+          "additionalProperties": false,
+          "properties": {
+            "date": {"type": "string", "format": "date"},
+            "report": {"$ref": "#/$defs/httpsUrl"},
+            "nextDue": {"type": "string", "format": "date"}
+          }
+        },
+        "status": {"enum": ["listed", "removed"]},
+        "removed": {
+          "type": "object",
+          "required": ["date", "reason"],
+          "properties": {"date": {"type": "string", "format": "date"}, "reason": {"type": "string", "minLength": 1}}
+        }
+      },
+      "if": {"properties": {"status": {"const": "removed"}}},
+      "then": {"required": ["removed"]}
+    },
+    "trustList": {
+      "type": "object",
+      "required": ["framework", "keeper", "published", "verifiers"],
+      "properties": {
+        "framework": {"const": "https://agent-capability.org/trust/v1"},
+        "keeper": {"$ref": "#/$defs/domain"},
+        "published": {"type": "string", "format": "date-time"},
+        "verifiers": {"type": "array", "items": {"$ref": "#/$defs/trustListEntry"}}
+      }
+    }
+  }
+}
