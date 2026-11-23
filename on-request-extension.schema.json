@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-capability.org/ext/on-request/v1/schema.json",
   "title": "On Request: A2A extension https://agent-capability.org/ext/on-request/v1",
-  "description": "Draft 0.1, 1 Nov 2026, not published. Defines the params of the AgentExtension declared in AgentCard.capabilities.extensions (params) and the object placed in Message.metadata or Artifact.metadata under the extension URI (reply). Checks a schema cannot make (each id names a skill in the same card; no listed skill carries securityRequirements; no on-request value in skill text) are left to validators.",
+  "description": "Draft 0.2, 23 Nov 2026 (replaces draft 0.1 of 1 Nov 2026). Defines the params of the AgentExtension declared in AgentCard.capabilities.extensions (params), the object an agent places in Message.metadata or Artifact.metadata under the extension URI (reply), and, from 0.2, the object a client may place in Message.metadata under the extension URI (request). Checks a schema cannot make (each id names a skill in the same card; no listed skill carries securityRequirements; no on-request value in skill text or reason; a claim counts for one message only) are left to validators and implementations.",
   "$defs": {
     "personEntry": {
       "description": "Where a person asks: an https address on an origin the operator controls, or a tel: number answered by or for the operator. The same for every caller; carries nothing about the person (OR-3.4, OR-3.8).",
@@ -14,6 +14,12 @@
         {"pattern": "^tel:\\+[0-9][0-9().-]{3,}$"}
       ]
     },
+    "skillId": {
+      "description": "The id of an AgentSkill in the card.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
     "skillEntry": {
       "type": "object",
       "required": ["id", "personEntry"],
@@ -21,9 +27,7 @@
       "properties": {
         "id": {
           "description": "The id of an AgentSkill in the same card (OR-3.3).",
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
+          "$ref": "#/$defs/skillId"
         },
         "personEntry": {"$ref": "#/$defs/personEntry"},
         "assistantAccess": {
@@ -68,25 +72,60 @@
       }
     },
     "reply": {
-      "description": "The object in Message.metadata or Artifact.metadata under the key https://agent-capability.org/ext/on-request/v1 (§6).",
+      "description": "The object an agent places in Message.metadata or Artifact.metadata under the key https://agent-capability.org/ext/on-request/v1 (§6.1, §6.2).",
       "type": "object",
       "required": ["status", "skillId"],
       "additionalProperties": true,
       "properties": {
         "status": {"enum": ["on-request", "action-referred", "given-on-opt-in"]},
-        "skillId": {"type": "string", "minLength": 1, "maxLength": 128},
-        "personEntry": {"$ref": "#/$defs/personEntry"}
+        "skillId": {"$ref": "#/$defs/skillId"},
+        "personEntry": {"$ref": "#/$defs/personEntry"},
+        "reason": {
+          "description": "Added in 0.2. Why the item is given on request, in the operator's approved words. on-request only; no value, amount, range or route; nothing addressed to the client (OR-6.5 to OR-6.7).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        }
       },
-      "if": {
-        "required": ["status"],
-        "properties": {"status": {"enum": ["on-request", "action-referred"]}}
-      },
-      "then": {"required": ["personEntry"]}
+      "allOf": [
+        {
+          "if": {
+            "required": ["status"],
+            "properties": {"status": {"enum": ["on-request", "action-referred"]}}
+          },
+          "then": {"required": ["personEntry"]}
+        },
+        {
+          "if": {"required": ["reason"]},
+          "then": {"properties": {"status": {"const": "on-request"}}}
+        }
+      ]
+    },
+    "request": {
+      "description": "Added in 0.2. The object a client may place in Message.metadata under the key https://agent-capability.org/ext/on-request/v1 (§6.3). A claim counts only for the message that carries it (OR-5.4a); it never names or describes the person (OR-5.4c).",
+      "type": "object",
+      "additionalProperties": true,
+      "anyOf": [
+        {"required": ["actingFor"]},
+        {"required": ["skillId"]}
+      ],
+      "not": {"required": ["status"]},
+      "properties": {
+        "actingFor": {
+          "description": "named-person: the client says it acts for a particular person in this message. none: it says it acts for no one.",
+          "enum": ["named-person", "none"]
+        },
+        "skillId": {
+          "description": "The skill the client is asking. An id the card does not list is treated as absent (OR-5.4d).",
+          "$ref": "#/$defs/skillId"
+        }
+      }
     }
   },
   "oneOf": [
     {"$ref": "#/$defs/agentExtension"},
     {"$ref": "#/$defs/params"},
-    {"$ref": "#/$defs/reply"}
+    {"$ref": "#/$defs/reply"},
+    {"$ref": "#/$defs/request"}
   ]
 }
